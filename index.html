@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <style> body { margin: 0; } canvas { display: block; margin: 0 auto; } </style>
+</head>
+<body>
+<script>
+    const config = {
+        type: Phaser.AUTO,
+        width: 800,
+        height: 400,
+        physics: {
+            default: 'arcade', // 使用最简单的物理引擎
+            arcade: { gravity: { y: 0 } }
+        },
+        scene: { preload: preload, create: create, update: update }
+    };
+
+    const game = new Phaser.Game(config);
+    let cueBall; // 白球
+    let redBall; // 红球
+    let cursor;  // 键盘控制
+
+    function preload() {
+        // 这里暂时用颜色块代替图片，方便你直接运行
+    }
+
+    function create() {
+        // 1. 创建白球 (白色圆点)
+        cueBall = this.add.circle(200, 200, 15, 0xffffff);
+        this.physics.add.existing(cueBall);
+        cueBall.body.setCollideWorldBounds(true); // 撞墙反弹
+        cueBall.body.setBounce(1);                // 满能量反弹
+
+        // 2. 创建红球 (红色圆点)
+        redBall = this.add.circle(600, 200, 15, 0xff0000);
+        this.physics.add.existing(redBall);
+        redBall.body.setCollideWorldBounds(true);
+        redBall.body.setBounce(1);
+
+        // 3. 设置球与球的碰撞
+        this.physics.add.collider(cueBall, redBall);
+
+        // 4. 设置鼠标点击击球
+        this.input.on('pointerdown', function (pointer) {
+            // 计算点击位置和白球的距离，给白球一个速度
+            this.physics.velocityFromAngle(Phaser.Math.Angle.BetweenPoints(cueBall, pointer) * 180 / Math.PI, 300, cueBall.body.velocity);
+        }, this);
+    }
+
+    function update() {
+        // 每秒减速，模拟摩擦力
+        cueBall.body.velocity.x *= 0.99;
+        cueBall.body.velocity.y *= 0.99;
+        redBall.body.velocity.x *= 0.99;
+        redBall.body.velocity.y *= 0.99;
+    }
+</script>
+</body>
+</html>
