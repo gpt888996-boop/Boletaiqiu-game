@@ -1,60 +1,91 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
-    <style> body { margin: 0; } canvas { display: block; margin: 0 auto; } </style>
+    <script src="https://unpkg.com/pubnub@7.2.2/dist/web/pubnub.min.js"></script>
+    <style> body { margin: 0; background: #222; } canvas { display: block; margin: 0 auto; } </style>
 </head>
 <body>
 <script>
+    // --- 联机初始化 ---
+    const urlParams = new URLSearchParams(window.location.search);
+    const myId = urlParams.get('id') || "guest_" + Math.floor(Math.random()*1000);
+    const myName = urlParams.get('name') || "游客";
+
+    // 使用公共测试 Key (仅供测试使用)
+    const pubnub = new PubNub({
+        publishKey: 'demo',
+        subscribeKey: 'demo',
+        userId: myId
+    });
+
+    // 订阅“台球大厅”频道
+    pubnub.subscribe({ channels: ['billiards_lobby'] });
+
+    // --- 游戏设置 ---
     const config = {
         type: Phaser.AUTO,
-        width: 800,
-        height: 400,
-        physics: {
-            default: 'arcade', // 使用最简单的物理引擎
-            arcade: { gravity: { y: 0 } }
-        },
+        width: 800, height: 400,
+        physics: { default: 'arcade', arcade: { gravity: { y: 0 } } },
         scene: { preload: preload, create: create, update: update }
     };
 
     const game = new Phaser.Game(config);
-    let cueBall; // 白球
-    let redBall; // 红球
-    let cursor;  // 键盘控制
+    let cueBall, redBall, scene;
 
-    function preload() {
-        // 这里暂时用颜色块代替图片，方便你直接运行
-    }
+    function preload() {}
 
     function create() {
-        // 1. 创建白球 (白色圆点)
-        cueBall = this.add.circle(200, 200, 15, 0xffffff);
-        this.physics.add.existing(cueBall);
-        cueBall.body.setCollideWorldBounds(true); // 撞墙反弹
-        cueBall.body.setBounce(1);                // 满能量反弹
+        scene = this;
+        // 创建提示文字
+        scene.add.text(10, 10, "玩家: " + myName, { fill: '#0f0' });
 
-        // 2. 创建红球 (红色圆点)
-        redBall = this.add.circle(600, 200, 15, 0xff0000);
-        this.physics.add.existing(redBall);
-        redBall.body.setCollideWorldBounds(true);
-        redBall.body.setBounce(1);
+        // 创建球
+        cueBall = scene.add.circle(200, 200, 15, 0xffffff);
+        scene.physics.add.existing(cueBall);
+        cueBall.body.setCollideWorldBounds(true).setBounce(1).setDrag(0.98);
 
-        // 3. 设置球与球的碰撞
-        this.physics.add.collider(cueBall, redBall);
+        redBall = scene.add.circle(600, 200, 15, 0xff0000);
+        scene.physics.add.existing(redBall);
+        redBall.body.setCollideWorldBounds(true).setBounce(1).setDrag(0.98);
 
-        // 4. 设置鼠标点击击球
-        this.input.on('pointerdown', function (pointer) {
-            // 计算点击位置和白球的距离，给白球一个速度
-            this.physics.velocityFromAngle(Phaser.Math.Angle.BetweenPoints(cueBall, pointer) * 180 / Math.PI, 300, cueBall.body.velocity);
-        }, this);
+        scene.physics.add.collider(cueBall, redBall);
+
+        // --- 监听击球动作 ---
+        scene.input.on('pointerdown', (pointer) => {
+            const angle = Phaser.Math.Angle.BetweenPoints(cueBall, pointer);
+            const power = 400;
+
+            // 1. 自己先动
+            shoot(angle, power);
+
+            // 2. 把击球动作同步给别人
+            pubnub.publish({
+                channel: 'billiards_lobby',
+                message: { shooter: myId, angle: angle, power: power }
+            });
+        });
+
+        // --- 接收对方的击球动作 ---
+        pubnub.addListener({
+            message: (obj) => {
+                if (obj.message.shooter !== myId) {
+                    // 只有是对方发的动作，我才执行
+                    shoot(obj.message.angle, obj.message.power);
+                }
+            }
+        });
+    }
+
+    function shoot(angle, power) {
+        scene.physics.velocityFromRotation(angle, power, cueBall.body.velocity);
     }
 
     function update() {
-        // 每秒减速，模拟摩擦力
-        cueBall.body.velocity.x *= 0.99;
-        cueBall.body.velocity.y *= 0.99;
-        redBall.body.velocity.x *= 0.99;
-        redBall.body.velocity.y *= 0.99;
+        // 模拟摩擦力
+        cueBall.body.velocity.multiply(0.99);
+        redBall.body.velocity.multiply(0.99);
     }
 </script>
 </body>
